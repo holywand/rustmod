@@ -1,0 +1,13 @@
+{
+  "required": false,
+  "minVersion": "0.8.5",
+  "package": "com.example.rustmod.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "mixins": [
+    "NoiseBasedChunkGeneratorMixin",
+    "NoiseInterpolatorMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 0
+  }
+}

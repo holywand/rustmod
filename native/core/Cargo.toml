@@ -1,0 +1,11 @@
+[package]
+name = "terrain-core"
+version = "1.0.0"
+edition = "2021"
+publish = false
+
+[lib]
+name = "terrain_core"
+crate-type = ["rlib"]
+
+[dependencies]

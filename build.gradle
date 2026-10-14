@@ -1,0 +1,133 @@
+plugins {
+    id 'java-library'
+    id 'net.neoforged.moddev' version '2.0.78'
+}
+
+version = mod_version
+group = mod_group_id
+
+base {
+    archivesName = mod_id
+}
+
+java {
+    toolchain.languageVersion = JavaLanguageVersion.of(21)
+    withSourcesJar()
+}
+
+repositories {
+    mavenCentral()
+}
+
+neoForge {
+    version = neo_version
+
+    runs {
+        client {
+            client()
+            systemProperty 'neoforge.enabledGameTestNamespaces', mod_id
+        }
+        server {
+            server()
+            programArgument '--nogui'
+            systemProperty 'neoforge.enabledGameTestNamespaces', mod_id
+        }
+    }
+
+    mods {
+        "${mod_id}" {
+            sourceSet sourceSets.main
+        }
+    }
+}
+
+def rustTarget = (findProperty('rustTarget') ?: '').toString()
+def hostOs = System.getProperty('os.name').toLowerCase()
+def hostArch = System.getProperty('os.arch').toLowerCase()
+
+def targetOs
+def targetArch
+if (rustTarget) {
+    targetOs = rustTarget.contains('windows') ? 'windows' : (rustTarget.contains('apple') ? 'macos' : 'linux')
+    targetArch = rustTarget.startsWith('aarch64') ? 'aarch64' : 'x86_64'
+} else {
+    targetOs = hostOs.contains('win') ? 'windows' : (hostOs.contains('mac') ? 'macos' : 'linux')
+    targetArch = (hostArch.contains('aarch64') || hostArch.contains('arm64')) ? 'aarch64' : 'x86_64'
+}
+def libraryFile = targetOs == 'windows' ? 'rustmod.dll' : (targetOs == 'macos' ? 'librustmod.dylib' : 'librustmod.so')
+def nativeDir = layout.projectDirectory.dir('native')
+def releaseDir = rustTarget ? "target/${rustTarget}/release" : 'target/release'
+def nativeOutput = layout.buildDirectory.dir('generated/natives')
+
+tasks.register('cargoTestDebug', Exec) {
+    group = 'verification'
+    description = 'Runs the Rust unit tests with overflow checks enabled'
+    workingDir nativeDir
+    commandLine 'cargo', 'test', '--workspace'
+}
+
+tasks.register('cargoTest', Exec) {
+    group = 'verification'
+    description = 'Runs the Rust unit tests in release mode after the debug run'
+    dependsOn 'cargoTestDebug'
+    workingDir nativeDir
+    commandLine 'cargo', 'test', '--release', '--workspace'
+}
+
+tasks.register('cargoBuild', Exec) {
+    group = 'build'
+    description = 'Builds the Rust cdylib in release mode'
+    workingDir nativeDir
+    def arguments = ['cargo', 'build', '--release', '-p', 'rustmod']
+    if (rustTarget) {
+        arguments.addAll(['--target', rustTarget])
+    }
+    commandLine arguments
+    inputs.dir(nativeDir.dir('core/src'))
+    inputs.dir(nativeDir.dir('bridge/src'))
+    inputs.file(nativeDir.file('Cargo.toml'))
+    inputs.file(nativeDir.file('core/Cargo.toml'))
+    inputs.file(nativeDir.file('bridge/Cargo.toml'))
+    inputs.property('rustTarget', rustTarget)
+    outputs.file(nativeDir.file("${releaseDir}/${libraryFile}"))
+}
+
+def prebuiltNatives = (findProperty('prebuiltNatives') ?: '').toString()
+
+tasks.register('bundleNatives', Copy) {
+    group = 'build'
+    description = 'Copies the compiled native libraries into the mod resources'
+    if (prebuiltNatives) {
+        from(file(prebuiltNatives)) {
+            into 'natives'
+        }
+    } else {
+        dependsOn 'cargoBuild'
+        from(nativeDir.file("${releaseDir}/${libraryFile}"))
+        into(nativeOutput.map { it.dir("natives/${targetOs}-${targetArch}") })
+    }
+    if (prebuiltNatives) {
+        into(nativeOutput)
+    }
+}
+
+sourceSets.main.resources.srcDir(nativeOutput)
+
+tasks.named('processResources') {
+    dependsOn 'bundleNatives'
+    var replaceProperties = [
+        minecraft_version: minecraft_version,
+        neo_version      : neo_version,
+        mod_id           : mod_id,
+        mod_version      : mod_version
+    ]
+    inputs.properties replaceProperties
+    filesMatching('META-INF/neoforge.mods.toml') {
+        expand replaceProperties
+    }
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+    options.release = 21
+}

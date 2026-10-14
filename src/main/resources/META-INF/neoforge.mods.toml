@@ -1,0 +1,26 @@
+modLoader = "javafml"
+loaderVersion = "[4,)"
+license = "MIT"
+
+[[mods]]
+modId = "rustmod"
+version = "${mod_version}"
+displayName = "Rust Terrain Optimizer"
+description = "Native Rust heightmap generation for the overworld NoiseBasedChunkGenerator."
+
+[[mixins]]
+config = "rustmod.mixins.json"
+
+[[dependencies.rustmod]]
+modId = "neoforge"
+type = "required"
+versionRange = "[21.1.0,21.2)"
+ordering = "NONE"
+side = "BOTH"
+
+[[dependencies.rustmod]]
+modId = "minecraft"
+type = "required"
+versionRange = "[1.21.1,1.21.2)"
+ordering = "NONE"
+side = "BOTH"
